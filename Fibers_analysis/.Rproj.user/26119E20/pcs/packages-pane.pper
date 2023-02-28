@@ -1,0 +1,7 @@
+{
+    "installOptions": {
+        "installFromRepository": true,
+        "libraryPath": "/Users/rsenft/Documents/GitHub/RebeccaSenft_Projects/002_Dymecki_neuro/Batch_3_fibers/Fibers_analysis/renv/library/R-4.1/x86_64-apple-darwin17.0",
+        "installDependencies": true
+    }
+}

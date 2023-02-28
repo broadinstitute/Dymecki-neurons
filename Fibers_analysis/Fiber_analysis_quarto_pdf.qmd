@@ -1,0 +1,220 @@
+---
+title: "Tph2 Fiber Analysis"
+format: 
+  pdf:
+    mainfont: Arial
+    fontsize: 10pt
+    include-in-header: 
+      - "wrap-code.tex"
+editor: visual
+page-layout: full
+---
+
+## Introduction
+
+This notebook takes in exported CellProfiler data along with a metadata table with information about treatment for each mouse and outputs graphs and statistics about the fibers.
+
+## Setup
+
+```{r}
+library(ggplot2)
+library(here)
+library(dplyr)
+library(RColorBrewer)
+library(readr)
+library(DT)
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=I(60)),tidy=TRUE)
+```
+
+## Get data
+
+Note that the CSV had to be corrected because there is one filename with ROB instead of ROb and because not all the metadata is extracted correctly (inconsistent filenames), so I manually corrected this in Excel using Flash Fill and correcting the mispelling and saved this as `Tph2_Per_Image_metadata_corrected.csv`.
+
+```{r, load_data}
+path_to_csv_folder = here("csvs")
+save_path <- path_to_csv_folder
+img_filename="Tph2_Per_Image_metadata_corrected.csv"
+sc_filename="Tph2_Per_BorderedCells.csv"
+
+metadata_filename="Litter-groups-A-through-ii.csv" #note I gave this headings
+
+#load data and metadata for images
+image_df <- read.csv(here(path_to_csv_folder,img_filename), check.names=FALSE)
+metadata <- read.csv(here(path_to_csv_folder,metadata_filename), check.names = FALSE)
+image_df_combined <- merge(image_df, metadata, by.x="Image_Metadata_Litter", by.y="Litter")
+
+#load data for single cells
+sc_df <- read.csv(here(path_to_csv_folder,sc_filename), check.names=FALSE)
+sc_df_combined <- merge(sc_df, image_df_combined, by="ImageNumber")
+```
+
+We also need to compute the average length of a branch, taken as the total skeleton length / (number of trunks + number of non-trunk branches).
+
+```{r, compute_avg_branch_length}
+sc_df_combined <- sc_df_combined %>% 
+  mutate(BorderedCells_ObjectSkeleton_avg_branch_length = BorderedCells_ObjectSkeleton_TotalObjectSkltnLngth_MrphlgclSkltn/(BorderedCells_ObjectSkeleton_NumberNonTrunkBranchs_MrphlgclSkltn+BorderedCells_ObjectSkeleton_NumberTrunks_MorphologicalSkeleton))
+```
+
+## Summarize skeleton features
+
+Summarize for each region, mouse, treatment (`region_df`) and for each mouse and treatment group (`total_df`).
+
+```{r, summarize}
+# Select only columns with fiber measurements and create summary table:
+cols2summarize <- names(sc_df_combined)[grepl("*ObjectSkeleton*", names(sc_df_combined))] 
+# make Inf NaN
+sc_df_combined[sc_df_combined==Inf]<- NaN
+#get morphological skeleton features
+
+region_df <- sc_df_combined %>% 
+  group_by(ExpGroup, Image_Metadata_Mouse, Image_Metadata_Region) %>%
+  summarize(across(all_of(cols2summarize), mean, na.rm=TRUE))
+
+total_df <- region_df %>% 
+  group_by(ExpGroup, Image_Metadata_Mouse) %>%
+  summarize(across(all_of(cols2summarize), mean, na.rm=TRUE))
+```
+
+## Plot skeleton features
+
+Plot the five features by region and by experimental group `ExpGroup`. First, we set up some plotting colors and descriptions for each variable:
+
+```{r, plot_setup}
+pal=c("#FFE66D",  "#C2CAE8", "#FF4365", "#00D9C0", "#F26419", "#86BBD8")
+pal_dark=c("#A38800",  "#273568","#FF6B6B", "#FF4365", "#00D9C0", "#F26419", "#86BBD8")
+
+measurements = c("BorderedCells_ObjectSkeleton_NumberBranchEnds_MorphologicalSkltn", 
+                 "BorderedCells_ObjectSkeleton_NumberNonTrunkBranchs_MrphlgclSkltn",
+                 "BorderedCells_ObjectSkeleton_NumberTrunks_MorphologicalSkeleton",
+                 "BorderedCells_ObjectSkeleton_TotalObjectSkltnLngth_MrphlgclSkltn",
+                 "BorderedCells_ObjectSkeleton_avg_branch_length")
+desc = c("Number of Branch Termini",
+         "Number of Trunk Branches",
+         "Number of Trunks",
+         "Total Skeleton Length",
+         "Mean Process Length")
+```
+
+Here is the function for our box and whisker plot:
+
+```{r, plot_boxplot_function}
+plot_boxwhisker <- function(data, measurements, desc, index, x_var){
+  meas<- measurements[index]
+  data<- data %>% filter(is.finite(get(meas)))
+  p <- ggplot(data, aes(x=get(x_var), y=get(meas), fill=ExpGroup))+
+  scale_fill_manual(values=pal)+
+  geom_boxplot(position = position_dodge(0.9))+
+  geom_jitter(position = position_dodge(0.9), alpha=0.8, aes(color=ExpGroup))+
+  scale_color_manual(values=pal_dark)+
+  stat_summary(fun=mean, geom="point", shape=18,
+               position = position_dodge(0.9),
+               size=3, color="firebrick")+
+  #geom_jitter(position = position_dodge(0.9), alpha=0.4)+
+  labs(title=paste0("Average ",desc[index]), 
+       subtitle="Each dot represents 1 animal",
+       caption="Source: Batch 3",
+       x="Region",
+       y=desc[index])+
+  theme(text = element_text(size = 20))
+  return(p)
+}
+```
+
+Now we apply that function to each of the 5 variables we want to plot:
+
+```{r, make_plots_regions}
+#| label: fig-expgroup_region
+#| layout-ncol: 3
+#| fig-cap: No effect of experimental group on fiber measures.
+#| fig-subcap: 
+#|   - ""
+#|   - ""
+#|   - ""
+#|   - ""
+#|   - ""
+#|   - ""
+
+p_list=list()
+for (i in 1:length(measurements)) {
+  p_list[[i]] <- plot_boxwhisker(region_df, measurements, desc, i, x_var="Image_Metadata_Region")
+  plot(p_list[[i]])
+}
+```
+
+In examining Mean Process Length, it almost looks like there could be a difference associated with experimental group in R4. We can look at this further by conducting a t-test. RA and IH are not statistically different:
+
+```{r, t-test}
+#t test
+y_var="BorderedCells_ObjectSkeleton_avg_branch_length"
+grp1 <- region_df %>% filter(Image_Metadata_Region=="R4", ExpGroup=="11% IH") %>% pull(y_var)
+grp2 <- region_df %>% filter(Image_Metadata_Region=="R4", ExpGroup=="RA") %>% pull(y_var)
+t.test(grp1, grp2)
+```
+
+Now let's just look overall at RA vs. IH mice:
+
+```{r, make_plots_overall}
+#| label: fig-expgroup
+#| layout-ncol: 3
+#| fig-cap: No effect of experimental group on fiber measures.
+#| fig-subcap: 
+#|   - ""
+#|   - ""
+#|   - ""
+#|   - ""
+#|   - ""
+#|   - ""
+
+p_list=list()
+for (i in 1:length(measurements)) {
+  p_list[[i]] <- plot_boxwhisker(total_df, measurements, desc, i, x_var="ExpGroup")
+  plot(p_list[[i]])
+}
+
+#cowplot::plot_grid(plotlist=p_list, ncol=2, scale=1)
+```
+
+Instead of viewing each animal as a datapoint, we can also look at the distribution of all cells. Here's our plotting function:
+
+```{r, distribution_by_region}
+plot_distribution <- function(data, measurements, desc, index, x_var, facetby){
+  p<- ggplot(sc_df_combined, aes(x=get(measurements[index]), fill=ExpGroup, color=ExpGroup))+
+  geom_density(alpha=0.7, adjust=1, color=NaN)+
+  scale_fill_manual(values=pal)+
+  geom_density(alpha=0.2, adjust=1, fill=NaN)+
+  scale_color_manual(values=pal_dark)+
+  facet_wrap(~get(facetby))+
+  labs(title=paste0("Distribution of ",desc[index], " by Region, treatment"), 
+       caption="Source: Batch 3",
+       x=desc[index])+
+  theme_bw()
+  print(p)
+}
+```
+
+Let's make some distribution plots:
+
+```{r, make_distribution_plots_region}
+for (i in 1:length(measurements)) {
+  plot_distribution(sc_df_combined, measurements, desc, i, x_var="ExpGroup", facetby="Image_Metadata_Region")
+}
+```
+
+## Make summary table (n counts for mouse, region, treatment)
+
+```{r}
+tally_df <- sc_df_combined %>% 
+  group_by(Image_Metadata_Mouse, Image_Metadata_Region, ExpGroup, ImageNumber) %>%
+  tally(name="n_cells") %>% 
+  select(-ImageNumber) %>% 
+  group_by(Image_Metadata_Mouse, Image_Metadata_Region, ExpGroup) %>% 
+  add_tally(name="n_images") %>%
+  summarize(n_cells=sum(n_cells), n_images=median(n_images)) %>%
+  mutate(n_cells_per_image=n_cells/n_images)
+
+kable(tally_df)
+
+#total_count_RA <- sc_df_combined %>% filter(ExpGroup=="RA") %>% count() %>% pull()
+#total_count_IH <- sc_df_combined %>% filter(ExpGroup=="11% IH") %>% count() %>% pull()
+```

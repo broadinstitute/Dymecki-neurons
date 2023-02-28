@@ -1,0 +1,14 @@
+---
+title: "Tph2 neuron fiber analysis"
+output: html_notebook
+---
+
+This notebook takes in exported CellProfiler data along with a metadata table with information about treatment for each mouse and outputs graphs and statistics about the fiber
+
+```{r, setup}
+library(ggplot2)
+library(here)
+library(dplyr)
+library(RColorBrewer)
+library(readr)
+```

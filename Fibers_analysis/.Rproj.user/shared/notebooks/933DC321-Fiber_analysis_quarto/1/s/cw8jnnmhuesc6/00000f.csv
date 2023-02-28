@@ -1,0 +1,2 @@
+"0","sc_df_combined <- sc_df_combined %>% "
+"0","  mutate(BorderedCells_ObjectSkeleton_avg_branch_length = BorderedCells_ObjectSkeleton_TotalObjectSkltnLngth_MrphlgclSkltn/(BorderedCells_ObjectSkeleton_NumberNonTrunkBranchs_MrphlgclSkltn+BorderedCells_ObjectSkeleton_NumberTrunks_MorphologicalSkeleton))"

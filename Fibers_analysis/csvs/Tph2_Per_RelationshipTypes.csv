@@ -1,0 +1,10 @@
+relationship_type_id,module_number,relationship,object_name1,object_name2
+1,24,Parent,Cells,Nuclei_pose
+2,24,Child,Nuclei_pose,Cells
+3,26,Parent,Cells,Nuclei
+4,26,Child,Nuclei,Cells
+5,39,Neighbors,Cells,Cells
+6,40,Parent,Cells_with_nuclei,Nuclei
+7,40,Child,Nuclei,Cells_with_nuclei
+8,41,Parent,Cells,BorderedCells
+9,41,Child,BorderedCells,Cells
