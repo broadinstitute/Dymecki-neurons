@@ -1,6 +1,7 @@
 # Dymecki-neurons
 Pipelines and files for segmentation of Tph2 neurons in mouse brain tissue sections
 
+<img src="https://user-images.githubusercontent.com/28116530/221900011-ec3f52ea-b979-47af-be54-16f1f8e95d51.png" height="400" />
 
 ## Steps to reproduce this analysis: 
 
